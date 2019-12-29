@@ -15,9 +15,6 @@ var compression = require('compression');
 //helmet
 var helmet = require('helmet');
 
-//Azure password
-const azure = require('./azure.env');
-
 
 var app = express();
 
