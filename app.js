@@ -24,8 +24,7 @@ var app = express();
 //Set up mongoose connection
 //db - connection
 var mongoose = require('mongoose');
-var mongoDB = 'mongodb+srv://aizpusuby:<password>@cluster0-pl1qc.azure.mongodb.net/test?retryWrites=true&w=majority'
-mongoDB = mongoDB.replace('<password>',azure_pass);
+var mongoDB = 'mongodb+srv://aizpusuby:throwawaypass@cluster0-pl1qc.azure.mongodb.net/test?retryWrites=true&w=majority'
 mongoose.connect(mongoDB, { useNewUrlParser: true, useUnifiedTopology: true });
 
 
