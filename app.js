@@ -9,6 +9,12 @@ var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var catalogRouter = require('./routes/catalog');
 
+//compressor
+var compression = require('compression');
+
+//helmet
+var helmet = require('helmet');
+
 //Azure password
 const azure = require('./azure.env');
 
@@ -35,6 +41,9 @@ app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+
+app.use(compression()); //compress all routes
+app.use(helmet());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);

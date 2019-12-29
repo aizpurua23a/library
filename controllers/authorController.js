@@ -4,6 +4,10 @@ var Author = require('../models/author');
 const async = require('async');
 const Book = require('../models/book');
 
+//Validators
+const {body, validationResult} = require('express-validator');
+const { sanitizeBody } = require('express-validator');
+
 // Display list of all Authors.
 exports.author_list = function(req, res) {
 
@@ -47,30 +51,157 @@ exports.author_detail = function(req, res) {
 
 // Display Author create form on GET.
 exports.author_create_get = function(req, res) {
-    res.send('NOT IMPLEMENTED: Author create GET');
+    res.render('author_form', { title: 'Create Author'});
 };
 
 // Handle Author create on POST.
-exports.author_create_post = function(req, res) {
-    res.send('NOT IMPLEMENTED: Author create POST');
-};
+exports.author_create_post = [
+
+    // Validate fields.
+    body('first_name').isLength({ min: 1 }).trim().withMessage('First name must be specified.')
+        .isAlphanumeric().withMessage('First name has non-alphanumeric characters.'),
+    body('family_name').isLength({ min: 1 }).trim().withMessage('Family name must be specified.')
+        .isAlphanumeric().withMessage('Family name has non-alphanumeric characters.'),
+    body('date_of_birth', 'Invalid date of birth').optional({ checkFalsy: true }).isISO8601(),
+    body('date_of_death', 'Invalid date of death').optional({ checkFalsy: true }).isISO8601(),
+
+    // Sanitize fields.
+    sanitizeBody('first_name').escape(),
+    sanitizeBody('family_name').escape(),
+    sanitizeBody('date_of_birth').toDate(),
+    sanitizeBody('date_of_death').toDate(),
+
+    // Process request after validation and sanitization.
+    (req, res, next) => {
+
+        // Extract the validation errors from a request.
+        const errors = validationResult(req);
+
+        if (!errors.isEmpty()) {
+            // There are errors. Render form again with sanitized values/errors messages.
+            res.render('author_form', { title: 'Create Author', author: req.body, errors: errors.array() });
+            return;
+        }
+        else {
+            // Data from form is valid.
+
+            // Create an Author object with escaped and trimmed data.
+            var author = new Author(
+                {
+                    first_name: req.body.first_name,
+                    family_name: req.body.family_name,
+                    date_of_birth: req.body.date_of_birth,
+                    date_of_death: req.body.date_of_death
+                });
+            author.save(function (err) {
+                if (err) { return next(err); }
+                // Successful - redirect to new author record.
+                res.redirect(author.url);
+            });
+        }
+    }
+];
 
 // Display Author delete form on GET.
-exports.author_delete_get = function(req, res) {
-    res.send('NOT IMPLEMENTED: Author delete GET');
+exports.author_delete_get = function(req, res, next) {
+
+    async.parallel({
+        author: function(callback) {
+          Author.findById(req.params.id).exec(callback)
+        },
+        authors_books: function(callback) {
+          Book.find({ 'author': req.params.id }).exec(callback)
+        },
+    }, function(err, results) {
+        if (err) { return next(err); }
+        if (results.author==null) { // No results.
+            res.redirect('/catalog/authors');
+        }
+        // Successful, so render.
+        res.render('author_delete', { title: 'Delete Author', author: results.author, author_books: results.authors_books } );
+    });
+
 };
 
 // Handle Author delete on POST.
-exports.author_delete_post = function(req, res) {
-    res.send('NOT IMPLEMENTED: Author delete POST');
+exports.author_delete_post = function(req, res, next) {
+
+    async.parallel({
+        author: function(callback) {
+          Author.findById(req.body.authorid).exec(callback)
+        },
+        authors_books: function(callback) {
+          Book.find({ 'author': req.body.authorid }).exec(callback)
+        },
+    }, function(err, results) {
+        if (err) { return next(err); }
+        // Success
+        if (results.authors_books.length > 0) {
+            // Author has books. Render in same way as for GET route.
+            res.render('author_delete', { title: 'Delete Author', author: results.author, author_books: results.authors_books } );
+            return;
+        }
+        else {
+            // Author has no books. Delete object and redirect to the list of authors.
+            Author.findByIdAndRemove(req.body.authorid, function deleteAuthor(err) {
+                if (err) { return next(err); }
+                // Success - go to author list
+                res.redirect('/catalog/authors')
+            })
+        }
+    });
 };
 
 // Display Author update form on GET.
-exports.author_update_get = function(req, res) {
-    res.send('NOT IMPLEMENTED: Author update GET');
+exports.author_update_get = function(req, res, next) {
+  // Get book, authors and genres for form.
+  Author.findById(req.params.id)
+  .exec(function(err,author) {
+    if (err) { return next(err); }
+    if (author==null) { // No results.
+      var err = new Error('Author not found');
+      err.status = 404;
+      return next(err);
+    }
+    // Success.
+    res.render('author_form', { title: 'Update Author', author: author});
+  });
 };
 
 // Handle Author update on POST.
-exports.author_update_post = function(req, res) {
-    res.send('NOT IMPLEMENTED: Author update POST');
-};
+exports.author_update_post = [
+      // Validate fields.
+      body('first_name', 'First Name must not be empty.').isLength({ min: 1 }).trim(),
+      body('family_name', 'Family Name must not be empty.').isLength({ min: 1 }).trim(),
+      body('date_of_birth', 'Date of Birth must be a valid date,').isISO8601().trim(),
+
+      // Sanitize fields.
+      sanitizeBody('*').escape(),
+
+      // Process request after validation and sanitization.
+      (req, res, next) => {
+
+          // Extract the validation errors from a request.
+          const errors = validationResult(req);
+
+          // Create a Book object with escaped/trimmed data and old id.
+          var author = new Author(
+            { first_name: req.body.first_name,
+              family_name: req.body.family_name,
+              date_of_birth: req.body.date_of_birth,
+              _id:req.params.id //This is required, or a new ID will be assigned!
+          });
+
+          if (!errors.isEmpty()) {
+            res.render('author_form', { title: 'Update Author',author: author, errors: errors.array() });
+            return;
+          } else {
+            // Data from form is valid. Update the record.
+            Author.findByIdAndUpdate(req.params.id, author, {}, function (err,theauthor) {
+              if (err) { return next(err); }
+              // Successful - redirect to book detail page.
+              res.redirect(theauthor.url);
+            });
+          }
+      }
+  ];
